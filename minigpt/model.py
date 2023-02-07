@@ -11,6 +11,7 @@ class NewGELU(nn.Module):
     Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT).
     Reference: Gaussian Error Linear Units (GELU) paper: https://arxiv.org/abs/1606.08415
     """
+
     def forward(self, x):
         return 0.5 * x * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
 
@@ -21,7 +22,7 @@ class CausalSelfAttention(nn.Module):
         hidden_size: int,
         num_heads: int,
         max_length: int,
-        dropout_prob: float=0.1,
+        dropout_prob: float = 0.1,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -29,7 +30,7 @@ class CausalSelfAttention(nn.Module):
         self.max_length = max_length
         self.dropout_prob = dropout_prob
 
-        self.input_projection = nn.Linear(in_features=hidden_size, out_features=3*hidden_size)
+        self.input_projection = nn.Linear(in_features=hidden_size, out_features=3 * hidden_size)
         self.output_projection = nn.Linear(in_features=hidden_size, out_features=hidden_size)
         self.attention_dropout = nn.Dropout(p=dropout_prob)
         self.output_dropout = nn.Dropout(p=dropout_prob)
@@ -55,7 +56,9 @@ class CausalSelfAttention(nn.Module):
 
         # attention_scores: [batch_size, num_heads, sequence_length, sequence_length]
         attention_scores = torch.matmul(input=query, other=key) / math.sqrt(hidden_size_per_head)
-        masked_attention_scores = attention_scores.masked_fill(self.causal_mask[:,:,:sequence_length,:sequence_length] == 0, float('-inf'))
+        masked_attention_scores = attention_scores.masked_fill(
+            self.causal_mask[:, :, :sequence_length, :sequence_length] == 0, float('-inf')
+        )
         attention_prob = torch.nn.functional.softmax(masked_attention_scores, dim=-1)
         attention_prob = self.attention_dropout(attention_prob)
 
@@ -74,11 +77,11 @@ class FeedForward(nn.Module):
         dropout_prob: float = 0.1,
     ) -> None:
         super().__init__()
-        self.input_projection = nn.Linear(in_features=hidden_size, out_features=4*hidden_size)
+        self.input_projection = nn.Linear(in_features=hidden_size, out_features=4 * hidden_size)
         self.activation = NewGELU()
-        self.output_projection = nn.Linear(in_features=4*hidden_size, out_features=hidden_size)
+        self.output_projection = nn.Linear(in_features=4 * hidden_size, out_features=hidden_size)
         self.dropout = nn.Dropout(p=dropout_prob)
-    
+
     def forward(self, input_tensor: torch.Tensor):
         # input_tensor: [batch_size, sequence_length, hidden_size]
         output = self.output_projection(self.activation(self.input_projection(input_tensor)))
@@ -92,7 +95,7 @@ class GPTBlock(nn.Module):
         hidden_size: int,
         num_heads: int,
         max_length: int,
-        dropout_prob: float=0.1,
+        dropout_prob: float = 0.1,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -121,7 +124,6 @@ class GPTBlock(nn.Module):
 
 
 class GPTModel(nn.Module):
-
     def __init__(
         self,
         vocab_size: int,
@@ -136,21 +138,18 @@ class GPTModel(nn.Module):
         self.hidden_size = hidden_size
         self.max_length = max_length
         self.num_layers = num_layers
-        self.dropout_prob=dropout_prob
+        self.dropout_prob = dropout_prob
 
-        self.token_embedding = nn.Embedding(
-            num_embeddings=vocab_size, embedding_dim=hidden_size
-        )
-        self.position_embedding = nn.Embedding(
-            num_embeddings=max_length, embedding_dim=hidden_size
-        )
+        self.token_embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=hidden_size)
+        self.position_embedding = nn.Embedding(num_embeddings=max_length, embedding_dim=hidden_size)
         self.dropout = nn.Dropout(p=dropout_prob)
         self.layer_norm = nn.LayerNorm(hidden_size)
-        self.blocks = nn.ModuleList([
-            GPTBlock(hidden_size=hidden_size, num_heads=num_heads, max_length=max_length, dropout_prob=dropout_prob)
-            for _ in range(num_layers)
-        ])
-
+        self.blocks = nn.ModuleList(
+            [
+                GPTBlock(hidden_size=hidden_size, num_heads=num_heads, max_length=max_length, dropout_prob=dropout_prob)
+                for _ in range(num_layers)
+            ]
+        )
 
     def forward(self, input_ids: torch.Tensor):
         device = input_ids.device
@@ -182,7 +181,7 @@ class GPTForLanguageModel(nn.Module):
         self.hidden_size = hidden_size
         self.max_length = max_length
         self.num_layers = num_layers
-        self.dropout_prob=dropout_prob
+        self.dropout_prob = dropout_prob
 
         self.transformer = GPTModel(
             vocab_size=vocab_size,
@@ -190,7 +189,7 @@ class GPTForLanguageModel(nn.Module):
             num_heads=num_heads,
             max_length=max_length,
             num_layers=num_layers,
-            dropout_prob=dropout_prob
+            dropout_prob=dropout_prob,
         )
         self.language_model_head = nn.Linear(hidden_size, vocab_size, bias=False)
         self.criterion = nn.CrossEntropyLoss()
@@ -216,14 +215,10 @@ class GPTForLanguageModel(nn.Module):
         #
         # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
         for name, parameter in module.named_parameters():
-            if name == "output_projection.weight":
+            if name == 'output_projection.weight':
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                torch.nn.init.normal_(
-                    parameter,
-                    mean=0.0,
-                    std=(0.02 / math.sqrt(2 * self.num_layers))
-                )
-    
+                torch.nn.init.normal_(parameter, mean=0.0, std=(0.02 / math.sqrt(2 * self.num_layers)))
+
     def forward(self, input_ids: torch.Tensor, labels: torch.Tensor | None = None):
         # input_ids, labels: [batch_size, sequence_length]
         # hidden_states: [batch_size, sequence_length, hidden_size]
@@ -263,7 +258,7 @@ class GPTForLanguageModel(nn.Module):
         return model
 
     @torch.no_grad()
-    def generate(self, prompt_ids: torch.Tensor, num_new_tokens: int=64, temperature: float=1.0):
+    def generate(self, prompt_ids: torch.Tensor, num_new_tokens: int = 64, temperature: float = 1.0):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
